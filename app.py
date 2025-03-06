@@ -1,42 +1,53 @@
-from flask import Flask, render_template, request
-import joblib
+import streamlit as st
+import pandas as pd
 import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
+import joblib
 
-# Initialize the Flask app
-app = Flask(__name__)
+# Load the data from the CSV files
+calories_df = pd.read_csv('calories.csv')
+exercise_df = pd.read_csv('exercise.csv')
 
-# Load the saved model and scaler
-model = joblib.load('calories_prediction_model.pkl')
-scaler = joblib.load('scaler.pkl')
+# Combine the dataframes if necessary (assuming the columns align)
+# Modify the merge or concatenation logic based on how your CSV files are structured
+data = pd.merge(calories_df, exercise_df, on='User_ID')  # Assuming 'User_ID' is the common column
 
-# Define the home route
-@app.route('/')
-def home():
-    return render_template('index.html')
+# Feature selection (update this according to your actual columns)
+X = data[['Age', 'Heart_Rate', 'Weight', 'Duration', 'Body_Temp']]  # Adjust based on available columns
+y = data['Calories']  # Target variable
 
-# Define the route for prediction
-@app.route('/predict', methods=['POST'])
-def predict():
-    if request.method == 'POST':
-        # Get user input from the form
-        age = float(request.form['age'])
-        height = float(request.form['height'])
-        weight = float(request.form['weight'])
-        duration = float(request.form['duration'])
-        heart_rate = float(request.form['heart_rate'])
-        body_temp = float(request.form['body_temp'])
+# Scaling the input features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-        # Create a feature array in the same order as the model's features
-        user_data = np.array([[age, height, weight, duration, heart_rate, body_temp]])
+# Train the RandomForestRegressor model
+model = RandomForestRegressor()
+model.fit(X_scaled, y)
 
-        # Scale the user input data using the saved scaler
-        user_data_scaled = scaler.transform(user_data)
+# Save the model and scaler for future use
+joblib.dump(model, 'fitness_calorie_model.pkl')
+joblib.dump(scaler, 'scaler.pkl')
 
-        # Predict the calories using the loaded model
-        calories_burned = model.predict(user_data_scaled)[0]
+# Streamlit app code
+st.title("Personal Fitness Tracker")
 
-        # Render the result back to the webpage
-        return render_template('fitness_data.html', prediction=calories_burned)
+# Input fields for user data
+age = st.number_input("Enter your age:", min_value=0)
+heart_rate = st.number_input("Enter your heart rate:")
+weight = st.number_input("Enter your weight (kg):")
+duration = st.number_input("Enter the duration of exercise (mins):")
+body_temp = st.number_input("Enter your body temperature (°C):")
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# Predict calories
+if st.button("Predict Calories Burned"):
+    if age > 0 and heart_rate > 0 and weight > 0 and duration > 0 and body_temp > 0:
+        # Prepare input data for prediction
+        input_data = np.array([[age, heart_rate, weight, duration, body_temp]])
+        input_data_scaled = scaler.transform(input_data)
+        
+        # Predict calories burned
+        predicted_calories = model.predict(input_data_scaled)
+        st.write(f"Estimated calories burned: {predicted_calories[0]:.2f} kcal")
+    else:
+        st.error("Please provide valid input for all fields.")
